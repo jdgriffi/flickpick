@@ -39,7 +39,7 @@ export const DEMO_MOVIES: Movie[] = [
     title: "The Dark Knight",
     overview:
       "Batman raises the stakes in his war on crime with the help of Lt. Gordon and District Attorney Harvey Dent.",
-    posterPath: "/qJ2tW6WMU2uBxuiNV17mfzupmx0.jpg",
+    posterPath: "/qJ2tW6WMUDux911r6m7haRef0WH.jpg",
     backdropPath: "/nMKdUUepR0i5zn0y1T4CsSB5chy.jpg",
     releaseDate: "2008-07-16",
     year: 2008,
