@@ -1,0 +1,8 @@
+/** App release metadata — bump when shipping. */
+export const APP_VERSION = "1.30";
+export const APP_BUILD_DATE = "2026_0826";
+export const APP_COPYRIGHT_HOLDER = "ProjectBrain.dev";
+
+export function copyrightYear(now = new Date()): number {
+  return now.getFullYear();
+}

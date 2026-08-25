@@ -15,9 +15,9 @@ const figtree = Figtree({
 });
 
 export const metadata: Metadata = {
-  title: "FlickPick — Movie Finder",
+  title: "FlickPick — Movie & TV Finder",
   description:
-    "Find movies by genre, MPAA rating, decade, streaming service, and IMDb score.",
+    "Find movies and TV shows by genre, rating, decade, streaming service, and IMDb score.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

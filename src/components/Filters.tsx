@@ -2,21 +2,31 @@
 
 import {
   DECADES,
-  GENRES,
+  FREE_STREAMING_VALUE,
+  genresFor,
+  MEDIA_TYPES,
   MIN_SCORE_OPTIONS,
-  MPAA_RATINGS,
-  SORT_OPTIONS,
+  ratingsFor,
+  sortOptionsFor,
   STREAMING_PROVIDERS,
 } from "@/lib/constants";
+import type { CompanyFilter, KeywordTag, MediaType, PersonFilter } from "@/lib/types";
+import { CheckboxDropdown } from "./CheckboxDropdown";
+import { TitleSearch } from "./TitleSearch";
+import { VibeTypeahead } from "./VibeTypeahead";
 
 export type FilterState = {
+  mediaType: MediaType;
   query: string;
-  genre: string;
-  certification: string;
-  decade: string;
+  genres: string[];
+  certifications: string[];
+  decades: string[];
   providers: string[];
   minScore: string;
   sort: string;
+  keyword: KeywordTag | null;
+  person: PersonFilter | null;
+  company: CompanyFilter | null;
 };
 
 type Props = {
@@ -28,82 +38,168 @@ type Props = {
 };
 
 export const DEFAULT_FILTERS: FilterState = {
+  mediaType: "movie",
   query: "",
-  genre: "",
-  certification: "",
-  decade: "",
+  genres: [],
+  certifications: [],
+  decades: [],
   providers: [],
   minScore: "",
   sort: "popularity.desc",
+  keyword: null,
+  person: null,
+  company: null,
 };
+
+const DECADE_OPTIONS = DECADES.map((d) => ({ value: d.value, label: d.label }));
+const PROVIDER_OPTIONS = [
+  { value: FREE_STREAMING_VALUE, label: "Free (ad-supported)" },
+  ...STREAMING_PROVIDERS.map((p) => ({
+    value: String(p.id),
+    label: p.shortName,
+  })),
+];
 
 export function Filters({ value, onChange, onReset, resultCount, loading }: Props) {
   function set<K extends keyof FilterState>(key: K, next: FilterState[K]) {
     onChange({ ...value, [key]: next });
   }
 
-  function toggleProvider(id: number) {
-    const idStr = String(id);
-    const providers = value.providers.includes(idStr)
-      ? value.providers.filter((p) => p !== idStr)
-      : [...value.providers, idStr];
-    onChange({ ...value, providers });
+  function setMediaType(next: MediaType) {
+    onChange({
+      ...value,
+      mediaType: next,
+      genres: [],
+      certifications: [],
+      sort: "popularity.desc",
+    });
   }
 
+  function setKeyword(next: KeywordTag | null) {
+    onChange({
+      ...value,
+      keyword: next,
+      person: next ? null : value.person,
+      company: next ? null : value.company,
+      // Title search and keyword discover don't combine well on TMDB
+      query: next ? "" : value.query,
+    });
+  }
+
+  function setPerson(next: PersonFilter | null) {
+    onChange({
+      ...value,
+      person: next,
+      keyword: next ? null : value.keyword,
+      company: next ? null : value.company,
+      query: next ? "" : value.query,
+    });
+  }
+
+  const activeChips: Array<{ key: string; label: string; clear: () => void }> = [];
+  if (value.keyword) {
+    activeChips.push({
+      key: `keyword-${value.keyword.id}`,
+      label: value.keyword.name,
+      clear: () => setKeyword(null),
+    });
+  }
+  if (value.person) {
+    activeChips.push({
+      key: `person-${value.person.id}`,
+      label: value.person.name,
+      clear: () => setPerson(null),
+    });
+  }
+  if (value.company) {
+    activeChips.push({
+      key: `company-${value.company.id}`,
+      label: value.company.name,
+      clear: () => set("company", null),
+    });
+  }
+
+  const genreOptions = genresFor(value.mediaType).map((g) => ({
+    value: String(g.id),
+    label: g.name,
+  }));
+  const ratingOptions = ratingsFor(value.mediaType).map((r) => ({ value: r, label: r }));
+  const ratingLabel = value.mediaType === "tv" ? "TV rating" : "MPAA";
+  const sortOptions = sortOptionsFor(value.mediaType);
+  const noun = value.mediaType === "tv" ? "shows" : "movies";
+
   return (
-    <section className="filters" aria-label="Movie filters">
-      <div className="filters__search">
-        <label className="sr-only" htmlFor="movie-search">
-          Search titles
-        </label>
-        <input
-          id="movie-search"
-          type="search"
-          placeholder="Search titles…"
-          value={value.query}
-          onChange={(e) => set("query", e.target.value)}
+    <section className="filters" aria-label="Title filters">
+      <div className="filters__top">
+        <TitleSearch
+          query={value.query}
+          mediaType={value.mediaType}
+          person={value.person}
+          onQueryChange={(query) => set("query", query)}
+          onPersonSelect={setPerson}
+          onPersonClear={() => setPerson(null)}
         />
+
+        <div className="media-toggle" role="group" aria-label="Content type">
+          {MEDIA_TYPES.map((t) => {
+            const active = value.mediaType === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                className={active ? "media-toggle__btn media-toggle__btn--active" : "media-toggle__btn"}
+                aria-pressed={active}
+                onClick={() => setMediaType(t.value)}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="filters__grid">
-        <label>
-          <span>Genre</span>
-          <select value={value.genre} onChange={(e) => set("genre", e.target.value)}>
-            <option value="">All genres</option>
-            {GENRES.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CheckboxDropdown
+          label="Genre"
+          options={genreOptions}
+          selected={value.genres}
+          onChange={(genres) => set("genres", genres)}
+          emptyLabel="Any genre"
+          allLabel="All genres"
+        />
 
-        <label>
-          <span>MPAA</span>
-          <select
-            value={value.certification}
-            onChange={(e) => set("certification", e.target.value)}
-          >
-            <option value="">Any rating</option>
-            {MPAA_RATINGS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CheckboxDropdown
+          label={ratingLabel}
+          options={ratingOptions}
+          selected={value.certifications}
+          onChange={(certifications) => set("certifications", certifications)}
+          emptyLabel="Any rating"
+          allLabel="All ratings"
+        />
 
-        <label>
-          <span>Decade</span>
-          <select value={value.decade} onChange={(e) => set("decade", e.target.value)}>
-            <option value="">Any decade</option>
-            {DECADES.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CheckboxDropdown
+          label="Decade"
+          options={DECADE_OPTIONS}
+          selected={value.decades}
+          onChange={(decades) => set("decades", decades)}
+          emptyLabel="Any decade"
+          allLabel="All decades"
+        />
+
+        <CheckboxDropdown
+          label="Streaming"
+          options={PROVIDER_OPTIONS}
+          selected={value.providers}
+          onChange={(providers) => set("providers", providers)}
+          emptyLabel="Any service"
+          allLabel="All services"
+        />
+
+        <VibeTypeahead
+          value={value.keyword}
+          mediaType={value.mediaType}
+          onChange={setKeyword}
+        />
 
         <label>
           <span>Min score</span>
@@ -119,7 +215,7 @@ export function Filters({ value, onChange, onReset, resultCount, loading }: Prop
         <label>
           <span>Sort by</span>
           <select value={value.sort} onChange={(e) => set("sort", e.target.value)}>
-            {SORT_OPTIONS.map((o) => (
+            {sortOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
@@ -128,29 +224,27 @@ export function Filters({ value, onChange, onReset, resultCount, loading }: Prop
         </label>
       </div>
 
-      <div className="filters__providers">
-        <span className="filters__providers-label">Streaming</span>
-        <div className="filters__chips" role="group" aria-label="Streaming services">
-          {STREAMING_PROVIDERS.map((p) => {
-            const active = value.providers.includes(String(p.id));
-            return (
-              <button
-                key={p.id}
-                type="button"
-                className={active ? "chip chip--active" : "chip"}
-                aria-pressed={active}
-                onClick={() => toggleProvider(p.id)}
-              >
-                {p.shortName}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="filters__footer">
+        {activeChips.length > 0 && (
+          <div className="filters__active">
+            {activeChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                className="vibe-chip vibe-chip--active"
+                onClick={chip.clear}
+                aria-label={`Clear ${chip.label}`}
+              >
+                {chip.label}
+                <span aria-hidden> ×</span>
+              </button>
+            ))}
+          </div>
+        )}
         <p className="filters__count">
-          {loading ? "Finding movies…" : `${resultCount?.toLocaleString() ?? "—"} matches`}
+          {loading
+            ? `Finding ${noun}…`
+            : `${resultCount?.toLocaleString() ?? "—"} matches`}
         </p>
         <button type="button" className="btn-ghost" onClick={onReset}>
           Reset filters

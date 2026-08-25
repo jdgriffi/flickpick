@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
 
   const filters: MovieFilters = {
+    mediaType: sp.get("mediaType") || undefined,
     genre: sp.get("genre") || undefined,
     certification: sp.get("certification") || undefined,
     decade: sp.get("decade") || undefined,
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
     sort: sp.get("sort") || undefined,
     page: sp.get("page") || undefined,
     query: sp.get("query") || undefined,
+    keyword: sp.get("keyword") || undefined,
+    person: sp.get("person") || undefined,
+    personName: sp.get("personName") || undefined,
+    company: sp.get("company") || undefined,
+    companyName: sp.get("companyName") || undefined,
   };
 
   try {

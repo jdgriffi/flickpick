@@ -4,6 +4,7 @@ import type { Movie } from "./types";
 export const DEMO_MOVIES: Movie[] = [
   {
     id: 278,
+    mediaType: "movie",
     title: "The Shawshank Redemption",
     overview:
       "Imprisoned men bond over years, finding solace and eventual redemption through acts of common decency.",
@@ -17,9 +18,11 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 9.3,
     genreIds: [18, 80],
     certification: "R",
+    providers: ["HBO Max", "Hulu"],
   },
   {
     id: 238,
+    mediaType: "movie",
     title: "The Godfather",
     overview:
       "The aging patriarch of an organized crime dynasty transfers control of his empire to his reluctant son.",
@@ -33,9 +36,11 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 9.2,
     genreIds: [18, 80],
     certification: "R",
+    providers: ["Paramount+", "Prime"],
   },
   {
     id: 155,
+    mediaType: "movie",
     title: "The Dark Knight",
     overview:
       "Batman raises the stakes in his war on crime with the help of Lt. Gordon and District Attorney Harvey Dent.",
@@ -49,9 +54,11 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 9.0,
     genreIds: [18, 28, 80, 53],
     certification: "PG-13",
+    providers: ["HBO Max"],
   },
   {
     id: 424,
+    mediaType: "movie",
     title: "Schindler's List",
     overview:
       "In German-occupied Poland, Oskar Schindler becomes concerned for his Jewish workforce after witnessing their persecution.",
@@ -65,9 +72,11 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 9.0,
     genreIds: [18, 36, 10752],
     certification: "R",
+    providers: ["Prime", "Peacock"],
   },
   {
     id: 13,
+    mediaType: "movie",
     title: "Forrest Gump",
     overview:
       "The presidencies of Kennedy and Johnson, Vietnam, Watergate, and other history unfold through the perspective of an Alabama man.",
@@ -81,9 +90,11 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 8.8,
     genreIds: [35, 18, 10749],
     certification: "PG-13",
+    providers: ["Paramount+", "Netflix"],
   },
   {
     id: 680,
+    mediaType: "movie",
     title: "Pulp Fiction",
     overview:
       "The lives of two mob hitmen, a boxer, a gangster's wife, and a pair of diner bandits intertwine in four tales of violence and redemption.",
@@ -97,9 +108,11 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 8.9,
     genreIds: [53, 80],
     certification: "R",
+    providers: ["HBO Max", "Paramount+"],
   },
   {
     id: 122,
+    mediaType: "movie",
     title: "The Lord of the Rings: The Return of the King",
     overview:
       "Aragorn is revealed as the heir to the ancient kings as the Battle of Pelennor Fields begins.",
@@ -113,9 +126,11 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 9.0,
     genreIds: [12, 14, 28],
     certification: "PG-13",
+    providers: ["HBO Max", "Hulu"],
   },
   {
     id: 550,
+    mediaType: "movie",
     title: "Fight Club",
     overview:
       "An insomniac office worker and a devil-may-care soap maker form an underground fight club that evolves into much more.",
@@ -129,5 +144,117 @@ export const DEMO_MOVIES: Movie[] = [
     imdbScore: 8.8,
     genreIds: [18],
     certification: "R",
+    providers: ["Hulu", "Disney+"],
+  },
+];
+
+export const DEMO_TV: Movie[] = [
+  {
+    id: 1396,
+    mediaType: "tv",
+    title: "Breaking Bad",
+    overview:
+      "A chemistry teacher diagnosed with cancer teams with a former student to cook and sell methamphetamine.",
+    posterPath: "/ggFHVNu6YYI5L9pCfOacjizRGt.jpg",
+    backdropPath: "/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg",
+    releaseDate: "2008-01-20",
+    year: 2008,
+    tmdbScore: 8.9,
+    voteCount: 14000,
+    imdbId: "tt0903747",
+    imdbScore: 9.5,
+    genreIds: [18, 80],
+    certification: "TV-MA",
+    providers: ["Netflix"],
+  },
+  {
+    id: 1399,
+    mediaType: "tv",
+    title: "Game of Thrones",
+    overview:
+      "Nine noble families fight for control over the lands of Westeros, while an ancient enemy returns.",
+    posterPath: "/1XS1oqLxiqw6GeRzQNB3V8kL9Ym.jpg",
+    backdropPath: "/2OMB0ynKlyIenMJWI2Dy9IWT4c.jpg",
+    releaseDate: "2011-04-17",
+    year: 2011,
+    tmdbScore: 8.4,
+    voteCount: 24000,
+    imdbId: "tt0944947",
+    imdbScore: 9.2,
+    genreIds: [10765, 18, 10759],
+    certification: "TV-MA",
+    providers: ["HBO Max"],
+  },
+  {
+    id: 66732,
+    mediaType: "tv",
+    title: "Stranger Things",
+    overview:
+      "When a young boy vanishes, a small town uncovers a mystery involving secret experiments and supernatural forces.",
+    posterPath: "/49WJfeN0moxb9IPfGn8AIqMGskD.jpg",
+    backdropPath: "/56v2KjBlU4XaOv9rVYEQypROD7P.jpg",
+    releaseDate: "2016-07-15",
+    year: 2016,
+    tmdbScore: 8.6,
+    voteCount: 18000,
+    imdbId: "tt4574334",
+    imdbScore: 8.7,
+    genreIds: [18, 10765, 9648],
+    certification: "TV-14",
+    providers: ["Netflix"],
+  },
+  {
+    id: 1418,
+    mediaType: "tv",
+    title: "The Office",
+    overview:
+      "A mockumentary on a group of typical office workers, where the workday consists of ego clashes and desperate behavior.",
+    posterPath: "/qWnJzyZhyy74h4YmXQKruMU9vKg.jpg",
+    backdropPath: "/mLyPePQQJWG7jkmg1tpkrv2Rua1.jpg",
+    releaseDate: "2005-03-24",
+    year: 2005,
+    tmdbScore: 8.6,
+    voteCount: 4000,
+    imdbId: "tt0386676",
+    imdbScore: 9.0,
+    genreIds: [35],
+    certification: "TV-14",
+    providers: ["Peacock", "Prime"],
+  },
+  {
+    id: 87108,
+    mediaType: "tv",
+    title: "Chernobyl",
+    overview:
+      "Workers at the Chernobyl nuclear power plant fight a catastrophic nuclear disaster in April 1986.",
+    posterPath: "/hlLXt2tOPT6RRnjiUmodyCPccQY.jpg",
+    backdropPath: "/AjZx0JlMb1L3u7EDJxfH3tQplXe.jpg",
+    releaseDate: "2019-05-06",
+    year: 2019,
+    tmdbScore: 8.6,
+    voteCount: 6000,
+    imdbId: "tt7366338",
+    imdbScore: 9.3,
+    genreIds: [18],
+    certification: "TV-MA",
+    providers: ["HBO Max"],
+  },
+  {
+    id: 60625,
+    mediaType: "tv",
+    title: "Rick and Morty",
+    overview:
+      "An alcoholic scientist and his grandson embark on wild, dangerous adventures across the multiverse.",
+    posterPath: "/gdIrmf2DdY5mgN6ycVP0XlzKTDr.jpg",
+    backdropPath: "/uGy4DCmM33I7Jk86Y3vCjOqbmJW.jpg",
+    releaseDate: "2013-12-02",
+    year: 2013,
+    tmdbScore: 8.7,
+    voteCount: 10000,
+    imdbId: "tt2861424",
+    imdbScore: 9.1,
+    genreIds: [16, 35, 10765],
+    certification: "TV-MA",
+    providers: ["Hulu", "Netflix"],
   },
 ];

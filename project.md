@@ -1,12 +1,12 @@
 # FlickPick
 
-Movie finder that filters TMDB discover results by genre, MPAA certification, decade, and US streaming providers, then sorts/filters by score.
+Movie & TV finder that filters TMDB discover results by media type, genre(s), rating(s) (MPAA or TV), decade(s), and US streaming providers, then sorts/filters by score.
 
 ## Stack
 
 - **Next.js 16 (App Router) + React 19 + TypeScript**
 - **Tailwind CSS v4** for base tooling; custom CSS for the cinematic UI
-- **TMDB API** for discover/search, genres, certifications, watch providers
+- **TMDB API** for discover/search (movies + TV), genres, certifications, watch providers
 - **OMDb API** (optional) for live IMDb ratings
 
 ## Why this stack
@@ -21,16 +21,25 @@ Long-term: easy to add auth, watchlists, or a thicker data layer without rewriti
 3. Optional: add `OMDB_API_KEY` from [OMDb](https://www.omdbapi.com/apikey.aspx) for IMDb scores
 4. `npm install && npm run dev`
 
-Without `TMDB_API_KEY`, the app runs in **demo mode** with a curated sample list so the UI is still usable.
+Without `TMDB_API_KEY`, the app runs in **demo mode** with curated movie and TV samples so the UI is still usable.
 
 ## Architecture
 
 | Piece | Role |
 | --- | --- |
 | `src/app/api/movies/route.ts` | Proxies filter params → TMDB (+ OMDb enrichment) |
-| `src/lib/tmdb.ts` | Discover/search, decade/provider/cert mapping, score sort |
+| `src/app/api/title/route.ts` | Title detail payload (credits, watch offers, TV/movie facts) |
+| `src/app/title/[mediaType]/[id]/page.tsx` | Detail page |
+| `src/lib/tmdb.ts` | Discover/search for movie or TV, decade/provider/cert mapping, score sort |
+| `src/lib/title-detail.ts` | Detail fetch, season watch best-effort, credit mapping |
 | `src/components/FlickPickApp.tsx` | Client state, debounced search, pagination |
-| `src/components/Filters.tsx` | Genre, MPAA, decade, streaming chips, min score, sort |
+| `src/components/Filters.tsx` | Type toggle, checkbox dropdowns, min score, sort |
+
+### Media type
+
+- **Movies** use MPAA ratings (G–NR) and movie genre IDs; dates use `primary_release_date`.
+- **TV** uses US TV ratings (TV-Y–TV-MA) and TV genre IDs; dates use `first_air_date`.
+- Switching type clears genre and rating selections (different ID/rating spaces).
 
 ### Score handling
 
@@ -41,7 +50,27 @@ Without `TMDB_API_KEY`, the app runs in **demo mode** with a curated sample list
 
 ### Streaming filter
 
-Uses TMDB `with_watch_providers` + `watch_region=US` + `with_watch_monetization_types=flatrate` for subscription services (Netflix, Prime, Disney+, Max, Hulu, Apple TV+, Paramount+, Peacock).
+Uses TMDB `with_watch_providers` + `watch_region=US` + monetization types (`flatrate`, or `free|ads` when Free streaming is selected) for Netflix, Prime, Disney+, HBO Max, Hulu, Apple TV+, Paramount+, Peacock, BritBox, Starz, AMC+, MGM+, Criterion, Crunchyroll, plus free/ad services (Tubi, Pluto, Freevee, Roku, Plex, Crackle).
+
+Movie cards also show US flatrate providers from TMDB `watch/providers` (up to four labels under year / rating / genre).
+
+### Title detail (`/title/{movie|tv}/{id}`)
+
+Poster clicks open a shareable full-page detail route. Data comes from TMDB details + credits + watch/providers (and optional OMDb score). Demo mode falls back to curated samples.
+
+**Core:** hero (backdrop/poster, title, year, cert, score), overview, cast + directors/creators, movie runtime / TV seasons·episodes·status·ep runtime, where-to-watch by monetization (stream / free / ads / rent / buy) with best-effort season notes for TV.
+
+**Also included:** genres + certification in the details block; TV networks + first/last air dates; movie theatrical vs digital release dates (from US release types when available).
+
+Cast is capped at 8. **Back to results** restores the last filters, page of results, and scroll position via `sessionStorage` (same for browser back to `/`).
+
+**More like this:** up to 12 related titles from TMDB recommendations, topped up with similar when needed. Cards link to other detail pages without overwriting the home browse scroll snapshot.
+
+**Vibes:** TMDB keywords on the detail page when available, topped up with genres when keywords are sparse. Clicking a chip returns to results filtered by that keyword or genre. Home filters include a **Vibe** typeahead that only lists keywords with discover matches for the current Movies/TV mode (with counts). Keyword discover uses a lower vote-count floor than the default browse gate so niche tags aren’t emptied out.
+
+**Credits / studios:** Actors, directors, creators, producers, and production companies on the detail page are clickable. They apply a TMDB `with_people` or `with_companies` discover filter (same media type) and return to results; active person/company chips appear in the filter bar and can be cleared. The main search has **typeahead** for titles and people: pick a title to open its detail page, or pick a person to browse their filmography. Typing without picking still runs a title-name search in the grid.
+
+Not yet: trailer.
 
 ## Design notes
 
