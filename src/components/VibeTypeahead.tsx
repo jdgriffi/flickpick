@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { KeywordTag, MediaType } from "@/lib/types";
 
 type Props = {
@@ -28,7 +28,7 @@ export function VibeTypeahead({ value, mediaType, onChange }: Props) {
       }
     }
 
-    function onKeyDown(event: KeyboardEvent) {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
 
@@ -89,7 +89,7 @@ export function VibeTypeahead({ value, mediaType, onChange }: Props) {
     setOpen(false);
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  function onKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (!open || options.length === 0) {
       if (event.key === "Escape") setOpen(false);
       return;

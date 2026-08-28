@@ -98,8 +98,10 @@ export async function searchKeywords(
     }),
   );
 
+  type ScoredKeyword = KeywordTag & { resultCount: number };
+
   return checked
-    .filter((kw): kw is KeywordTag => kw != null)
-    .sort((a, b) => (b.resultCount ?? 0) - (a.resultCount ?? 0))
+    .filter((kw): kw is ScoredKeyword => kw != null)
+    .sort((a, b) => b.resultCount - a.resultCount)
     .slice(0, RESULT_LIMIT);
 }
