@@ -262,6 +262,12 @@ export const MIN_SCORE_OPTIONS = [
   { value: "8.5", label: "8.5+" },
 ] as const;
 
+/** TMDB discover/search page size (fixed by the API). */
+export const TMDB_PAGE_SIZE = 20;
+
+/** Browse grid page size — two TMDB pages merged per UI page. */
+export const RESULTS_PER_PAGE = 40;
+
 export const POSTER_SIZE = "w342";
 export const BACKDROP_SIZE = "w1280";
 export const PROFILE_SIZE = "w185";

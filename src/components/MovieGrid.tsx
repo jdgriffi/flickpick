@@ -24,7 +24,7 @@ export function MovieGrid({
   if (loading && movies.length === 0) {
     return (
       <div className="grid-skeleton" aria-hidden>
-        {Array.from({ length: 8 }).map((_, i) => (
+        {Array.from({ length: 12 }).map((_, i) => (
           <div key={i} className="skeleton-card" />
         ))}
       </div>

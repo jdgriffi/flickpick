@@ -8,6 +8,8 @@ import {
   knownStreamingProviderIds,
   providerShortName,
   ratingScaleFor,
+  RESULTS_PER_PAGE,
+  TMDB_PAGE_SIZE,
 } from "./constants";
 import type { DiscoverResponse, MediaType, Movie, MovieFilters } from "./types";
 
@@ -231,6 +233,34 @@ function mergeDiscoverPages(pages: TmdbDiscover[], page: number): TmdbDiscover {
     total_pages: Math.max(...pages.map((p) => p.total_pages), 1),
     total_results: pages.reduce((sum, p) => sum + p.total_results, 0),
     results: merged,
+  };
+}
+
+const TMDB_PAGES_PER_UI_PAGE = RESULTS_PER_PAGE / TMDB_PAGE_SIZE;
+
+function uiPageTotalPages(tmdbTotalResults: number): number {
+  return Math.max(1, Math.ceil(tmdbTotalResults / RESULTS_PER_PAGE));
+}
+
+/** Fetch consecutive TMDB pages for one UI browse page (e.g. UI page 2 → TMDB pages 3–4). */
+async function fetchDiscoverBatch(
+  path: string,
+  params: Record<string, string>,
+  uiPage: number,
+): Promise<TmdbDiscover> {
+  const startTmdbPage = (uiPage - 1) * TMDB_PAGES_PER_UI_PAGE + 1;
+  const tmdbPages = await Promise.all(
+    Array.from({ length: TMDB_PAGES_PER_UI_PAGE }, (_, i) =>
+      tmdbFetch<TmdbDiscover>(path, { ...params, page: String(startTmdbPage + i) }),
+    ),
+  );
+  const merged = mergeDiscoverPages(tmdbPages, uiPage);
+  const totalResults = tmdbPages[0]?.total_results ?? merged.total_results;
+  return {
+    page: uiPage,
+    results: merged.results,
+    total_results: totalResults,
+    total_pages: uiPageTotalPages(totalResults),
   };
 }
 
@@ -499,12 +529,11 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
 
   let data: TmdbDiscover;
   if (filters.query?.trim()) {
-    data = await tmdbFetch<TmdbDiscover>(searchPath, {
+    data = await fetchDiscoverBatch(searchPath, {
       query: filters.query.trim(),
       language: "en-US",
       include_adult: "false",
-      page: params.page,
-    });
+    }, pageNum);
   } else if (needsDecadeParallel && needsCertParallel) {
     delete params.certification;
     delete params["certification.gte"];
@@ -512,38 +541,41 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
     delete params.certification_country;
     const pages = await Promise.all(
       decades.map((range) =>
-        tmdbFetch<TmdbDiscover>(discoverPath, {
+        fetchDiscoverBatch(discoverPath, {
           ...params,
           [gte]: `${range.start}-01-01`,
           [lte]: `${range.end}-12-31`,
-        }),
+        }, pageNum),
       ),
     );
     data = mergeDiscoverPages(pages, pageNum);
+    data.total_pages = uiPageTotalPages(pages[0]?.total_results ?? data.total_results);
   } else if (needsDecadeParallel) {
     const pages = await Promise.all(
       decades.map((range) =>
-        tmdbFetch<TmdbDiscover>(discoverPath, {
+        fetchDiscoverBatch(discoverPath, {
           ...params,
           [gte]: `${range.start}-01-01`,
           [lte]: `${range.end}-12-31`,
-        }),
+        }, pageNum),
       ),
     );
     data = mergeDiscoverPages(pages, pageNum);
+    data.total_pages = uiPageTotalPages(pages[0]?.total_results ?? data.total_results);
   } else if (needsCertParallel) {
     const pages = await Promise.all(
       certs.map((cert) =>
-        tmdbFetch<TmdbDiscover>(discoverPath, {
+        fetchDiscoverBatch(discoverPath, {
           ...params,
           certification_country: "US",
           certification: cert,
-        }),
+        }, pageNum),
       ),
     );
     data = mergeDiscoverPages(pages, pageNum);
+    data.total_pages = uiPageTotalPages(pages[0]?.total_results ?? data.total_results);
   } else {
-    data = await tmdbFetch<TmdbDiscover>(discoverPath, params);
+    data = await fetchDiscoverBatch(discoverPath, params, pageNum);
   }
 
   let enriched = await enrichTitles(data.results, mediaType);
@@ -566,7 +598,7 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
 
   return {
     page: data.page,
-    totalPages: Math.min(data.total_pages, 500),
+    totalPages: Math.min(data.total_pages, Math.floor(500 / TMDB_PAGES_PER_UI_PAGE)),
     totalResults: data.total_results,
     results,
     scoreSource,
