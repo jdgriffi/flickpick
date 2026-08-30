@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { type Ref, useState } from "react";
 import { touchBrowseScroll } from "@/lib/browse-session";
 import { genreName, posterUrl } from "@/lib/constants";
 import type { Movie } from "@/lib/types";
@@ -17,6 +17,8 @@ type Props = {
   index: number;
   scoreSource: "imdb" | "tmdb";
   rememberBrowseScroll?: boolean;
+  /** Set on the card that triggers the next infinite-scroll fetch. */
+  cardRef?: Ref<HTMLElement>;
 };
 
 export function MovieCard({
@@ -24,6 +26,7 @@ export function MovieCard({
   index,
   scoreSource,
   rememberBrowseScroll = true,
+  cardRef,
 }: Props) {
   const poster = posterUrl(movie.posterPath);
   const [imgFailed, setImgFailed] = useState(false);
@@ -33,7 +36,11 @@ export function MovieCard({
   const onNav = rememberBrowseScroll ? rememberScroll : undefined;
 
   return (
-    <article className="movie" style={{ animationDelay: `${Math.min(index, 12) * 45}ms` }}>
+    <article
+      ref={cardRef}
+      className="movie"
+      style={{ animationDelay: `${Math.min(index, 12) * 45}ms` }}
+    >
       <div className="movie__media">
         <Link
           href={href}

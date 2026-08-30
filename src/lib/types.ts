@@ -27,7 +27,10 @@ export type MovieFilters = {
   providers?: string;
   minScore?: string;
   sort?: string;
+  /** First TMDB page to fetch (1-based cursor). */
   page?: string;
+  /** How many consecutive TMDB pages to pull in this batch. */
+  pageCount?: string;
   query?: string;
   /** TMDB keyword id for vibe filtering. */
   keyword?: string;
@@ -64,8 +67,10 @@ export type CompanyFilter = {
 };
 
 export type DiscoverResponse = {
+  /** First TMDB page included in this batch. */
   page: number;
-  totalPages: number;
+  /** Cursor for the next batch, or null when there is nothing left to load. */
+  nextPage: number | null;
   totalResults: number;
   results: Movie[];
   scoreSource: "imdb" | "tmdb";

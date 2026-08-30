@@ -241,11 +241,20 @@ export function Filters({ value, onChange, onReset, resultCount, loading }: Prop
             ))}
           </div>
         )}
-        <p className="filters__count">
-          {loading
-            ? `Finding ${noun}…`
-            : `${resultCount?.toLocaleString() ?? "—"} matches`}
-        </p>
+        <div className="filters__meta">
+          <p className="filters__count">
+            {loading
+              ? `Finding ${noun}…`
+              : `${resultCount?.toLocaleString() ?? "—"} matches`}
+          </p>
+          {/* Endless scroll pushes the footer out of reach, so attribution lives here too. */}
+          <p className="filters__credit">
+            Data from{" "}
+            <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">
+              TMDB
+            </a>
+          </p>
+        </div>
         <button type="button" className="btn-ghost" onClick={onReset}>
           Reset filters
         </button>
