@@ -32,7 +32,7 @@ Without `TMDB_API_KEY`, the app runs in **demo mode** with curated movie and TV 
 | `src/app/title/[mediaType]/[id]/page.tsx` | Detail page |
 | `src/lib/tmdb.ts` | Discover/search for movie or TV, decade/provider/cert mapping, score sort |
 | `src/lib/title-detail.ts` | Detail fetch, season watch best-effort, credit mapping |
-| `src/components/FlickPickApp.tsx` | Client state, debounced search, pagination |
+| `src/components/FlickPickApp.tsx` | Client state, debounced search, endless scroll |
 | `src/components/Filters.tsx` | Type toggle, checkbox dropdowns, min score, sort |
 
 ### Media type
@@ -62,9 +62,19 @@ Poster clicks open a shareable full-page detail route. Data comes from TMDB deta
 
 **Also included:** genres + certification in the details block; TV networks + first/last air dates; movie theatrical vs digital release dates (from US release types when available).
 
-Cast is capped at 8. **Back to results** restores the last filters, page of results, and scroll position via `sessionStorage` (same for browser back to `/`).
+Cast is capped at 8. **Back to results** restores the last filters, accumulated results (capped ~400 titles), and scroll position via `sessionStorage` (same for browser back to `/`).
 
 **More like this:** up to 12 related titles from TMDB recommendations, topped up with similar when needed. Cards link to other detail pages without overwriting the home browse scroll snapshot.
+
+### Endless scroll
+
+Browse replaces Previous/Next with an accumulating feed:
+
+- First fetch: **40** titles (2 TMDB pages).
+- Auto top-up: when the user is within **20** titles of the end, fetch **+20** (1 TMDB page).
+- After 5 consecutive empty batches (client-side filters rejecting a whole page), auto-load pauses and shows a **Load more** button.
+- Site footer appears only at end-of-results; TMDB attribution also sits in the filter bar so it stays visible while scrolling.
+- Session snapshot key `flickpick:browse-v2` stores discrete batches so truncating for quota still leaves a correct next-page cursor.
 
 **Vibes:** TMDB keywords on the detail page when available, topped up with genres when keywords are sparse. Clicking a chip returns to results filtered by that keyword or genre. Home filters include a **Vibe** typeahead that only lists keywords with discover matches for the current Movies/TV mode (with counts). Keyword discover uses a lower vote-count floor than the default browse gate so niche tags aren’t emptied out.
 

@@ -1,121 +1,234 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type BrowseResults,
   buildBrowseQueryKey,
+  buildDiscoverUrl,
+  flattenBatches,
   loadBrowseSnapshot,
+  nextCursor,
   saveBrowseSnapshot,
 } from "@/lib/browse-session";
-import type { DiscoverResponse } from "@/lib/types";
+import {
+  INITIAL_PAGE_COUNT,
+  LOAD_MORE_PAGE_COUNT,
+  MAX_EMPTY_BATCH_STREAK,
+  SCROLL_TRIGGER_REMAINING,
+} from "@/lib/constants";
+import type { DiscoverResponse, Movie } from "@/lib/types";
 import { DEFAULT_FILTERS, Filters, type FilterState } from "./Filters";
 import { MovieGrid } from "./MovieGrid";
 import { SiteFooter } from "./SiteFooter";
 
+type DiscoverPayload = DiscoverResponse & { error?: string };
+
+const movieKey = (m: Movie) => `${m.mediaType}-${m.id}`;
+
+const isAbort = (err: unknown) => err instanceof DOMException && err.name === "AbortError";
+
+const errorMessage = (err: unknown) =>
+  err instanceof Error ? err.message : "Something went wrong";
+
 export function FlickPickApp() {
   const [sessionReady, setSessionReady] = useState(false);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [page, setPage] = useState(1);
-  const [data, setData] = useState<DiscoverResponse | null>(null);
+  const [results, setResults] = useState<BrowseResults | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [autoPaused, setAutoPaused] = useState(false);
+
+  const queryKey = useMemo(() => buildBrowseQueryKey(filters), [filters]);
+  const items = useMemo(
+    () => (results ? flattenBatches(results.batches) : []),
+    [results],
+  );
+  const cursor = results ? nextCursor(results.batches) : null;
+  const atEnd = results != null && cursor == null;
+
   const scrollRestoreRef = useRef<number | null>(null);
   const didRestoreScrollRef = useRef(false);
   const cachedQueryKeyRef = useRef<string | null>(null);
-  const stateRef = useRef({ filters: DEFAULT_FILTERS, page: 1, data: null as DiscoverResponse | null });
+  const queryKeyRef = useRef(queryKey);
+  const resultsRef = useRef<BrowseResults | null>(null);
+  const filtersRef = useRef<FilterState>(DEFAULT_FILTERS);
+  const moreAbortRef = useRef<AbortController | null>(null);
+  const loadingMoreRef = useRef(false);
+  const emptyStreakRef = useRef(0);
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    queryKeyRef.current = queryKey;
+    resultsRef.current = results;
+    filtersRef.current = filters;
+  }, [queryKey, results, filters]);
 
   useEffect(() => {
     const snap = loadBrowseSnapshot();
     if (snap) {
       setFilters(snap.filters);
-      setPage(snap.page);
-      if (snap.data) {
-        setData(snap.data);
+      if (snap.results) {
+        setResults(snap.results);
         cachedQueryKeyRef.current = snap.queryKey;
-        setLoading(false);
+        setInitialLoading(false);
       }
       scrollRestoreRef.current = snap.scrollY;
     }
     setSessionReady(true);
   }, []);
 
-  useEffect(() => {
-    stateRef.current = { filters, page, data };
-  }, [filters, page, data]);
-
+  /** First batch for a filter set: two TMDB pages so the grid opens with 40 titles. */
   useEffect(() => {
     if (!sessionReady) return;
+    if (cachedQueryKeyRef.current === queryKey && resultsRef.current) return;
 
     const controller = new AbortController();
-    const queryKey = buildBrowseQueryKey(filters, page);
-    const hasCache = cachedQueryKeyRef.current === queryKey && data != null;
     const timer = setTimeout(() => {
-      if (!hasCache) setLoading(true);
+      moreAbortRef.current?.abort();
+      loadingMoreRef.current = false;
+      emptyStreakRef.current = 0;
+      setLoadingMore(false);
+      setAutoPaused(false);
+      setInitialLoading(true);
       setError(null);
 
-      fetch(`/api/movies?${queryKey}`, { signal: controller.signal })
+      fetch(buildDiscoverUrl(queryKey, 1, INITIAL_PAGE_COUNT), { signal: controller.signal })
         .then(async (res) => {
-          const json = (await res.json()) as DiscoverResponse & { error?: string };
+          const json = (await res.json()) as DiscoverPayload;
           if (!res.ok) throw new Error(json.error || "Request failed");
           cachedQueryKeyRef.current = queryKey;
-          startTransition(() => {
-            setData(json);
+          setResults({
+            batches: [{ items: json.results, cursor: json.nextPage }],
+            totalResults: json.totalResults,
+            scoreSource: json.scoreSource,
+            mediaType: json.mediaType,
+            message: json.message,
           });
         })
         .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          setError(err instanceof Error ? err.message : "Something went wrong");
+          if (isAbort(err)) return;
+          setError(errorMessage(err));
         })
-        .finally(() => setLoading(false));
-    }, filters.query ? 300 : 0);
+        .finally(() => setInitialLoading(false));
+    }, filters.query.trim() ? 300 : 0);
 
     return () => {
       controller.abort();
       clearTimeout(timer);
     };
-    // data used only for cache gate on session restore; omit from deps to avoid loops
+    // resultsRef is only a cache gate for session restore; including it would loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, page, sessionReady]);
+  }, [queryKey, sessionReady]);
+
+  /** Append the next TMDB page. Single-flight; stale responses are dropped. */
+  const loadMore = useCallback(() => {
+    if (loadingMoreRef.current) return;
+
+    const prev = resultsRef.current;
+    const key = queryKeyRef.current;
+    const from = prev ? nextCursor(prev.batches) : null;
+    if (!prev || from == null) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+
+    const controller = new AbortController();
+    moreAbortRef.current = controller;
+
+    fetch(buildDiscoverUrl(key, from, LOAD_MORE_PAGE_COUNT), { signal: controller.signal })
+      .then(async (res) => {
+        const json = (await res.json()) as DiscoverPayload;
+        if (!res.ok) throw new Error(json.error || "Request failed");
+        if (queryKeyRef.current !== key) return;
+
+        const base = resultsRef.current ?? prev;
+        const seen = new Set(flattenBatches(base.batches).map(movieKey));
+        const fresh = json.results.filter((m) => !seen.has(movieKey(m)));
+
+        // A batch can come back empty when client-side filtering rejects the whole
+        // page. Chasing that forever would scroll-loop, so give up after a streak.
+        emptyStreakRef.current = fresh.length ? 0 : emptyStreakRef.current + 1;
+        if (emptyStreakRef.current >= MAX_EMPTY_BATCH_STREAK) setAutoPaused(true);
+
+        setError(null);
+        setResults({
+          ...base,
+          batches: [...base.batches, { items: fresh, cursor: json.nextPage }],
+        });
+      })
+      .catch((err: unknown) => {
+        if (isAbort(err)) return;
+        setError(errorMessage(err));
+        setAutoPaused(true);
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      });
+  }, []);
+
+  const loadMoreRef = useRef(loadMore);
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+
+  /**
+   * Watch the card `SCROLL_TRIGGER_REMAINING` from the end — once it's on screen
+   * there are 20 or fewer titles left below, so pull the next page.
+   */
+  useEffect(() => {
+    if (!sessionReady || initialLoading || autoPaused || cursor == null) return;
+    const node = triggerRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) loadMoreRef.current();
+      },
+      { rootMargin: "400px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [sessionReady, initialLoading, autoPaused, cursor, items.length]);
+
+  /**
+   * With no cards there's nothing for the observer to watch, so keep pulling
+   * directly. Happens when client-side filtering rejects an entire batch.
+   */
+  useEffect(() => {
+    if (!sessionReady || initialLoading || autoPaused || loadingMore) return;
+    if (items.length > 0 || cursor == null) return;
+    loadMoreRef.current();
+  }, [sessionReady, initialLoading, autoPaused, loadingMore, items.length, cursor]);
 
   useEffect(() => {
     if (!sessionReady) return;
     saveBrowseSnapshot({
       filters,
-      page,
-      data,
+      results,
       scrollY: typeof window !== "undefined" ? window.scrollY : 0,
-      queryKey: buildBrowseQueryKey(filters, page),
+      queryKey,
     });
-  }, [filters, page, data, sessionReady]);
+  }, [filters, results, queryKey, sessionReady]);
 
   useEffect(() => {
     if (!sessionReady) return;
 
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const persistScroll = () => {
-      if (scrollTimer) clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(() => {
-        const { filters: f, page: p, data: d } = stateRef.current;
-        saveBrowseSnapshot({
-          filters: f,
-          page: p,
-          data: d,
-          scrollY: window.scrollY,
-          queryKey: buildBrowseQueryKey(f, p),
-        });
-      }, 120);
+    const persistNow = () => {
+      saveBrowseSnapshot({
+        filters: filtersRef.current,
+        results: resultsRef.current,
+        scrollY: window.scrollY,
+        queryKey: queryKeyRef.current,
+      });
     };
 
-    const persistNow = () => {
-      const { filters: f, page: p, data: d } = stateRef.current;
-      saveBrowseSnapshot({
-        filters: f,
-        page: p,
-        data: d,
-        scrollY: window.scrollY,
-        queryKey: buildBrowseQueryKey(f, p),
-      });
+    const persistScroll = () => {
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(persistNow, 120);
     };
 
     window.addEventListener("pagehide", persistNow);
@@ -128,7 +241,7 @@ export function FlickPickApp() {
   }, [sessionReady]);
 
   useEffect(() => {
-    if (!sessionReady || loading || didRestoreScrollRef.current) return;
+    if (!sessionReady || initialLoading || didRestoreScrollRef.current) return;
     const y = scrollRestoreRef.current;
     if (y == null || y <= 0) {
       didRestoreScrollRef.current = true;
@@ -139,23 +252,21 @@ export function FlickPickApp() {
     requestAnimationFrame(() => {
       window.scrollTo(0, y);
     });
-  }, [sessionReady, loading, data]);
+  }, [sessionReady, initialLoading, results]);
 
-  function handleFilterChange(next: FilterState) {
+  function startNewSession(next: FilterState) {
     didRestoreScrollRef.current = true;
     scrollRestoreRef.current = null;
-    setPage(1);
     setFilters(next);
+    window.scrollTo(0, 0);
   }
 
-  function handleReset() {
-    didRestoreScrollRef.current = true;
-    scrollRestoreRef.current = null;
-    setPage(1);
-    setFilters(DEFAULT_FILTERS);
+  function handleResumeAutoLoad() {
+    emptyStreakRef.current = 0;
+    setAutoPaused(false);
+    setError(null);
+    loadMore();
   }
-
-  const busy = loading || isPending;
 
   return (
     <div className="app-shell">
@@ -173,47 +284,43 @@ export function FlickPickApp() {
       <main className="main">
         <Filters
           value={filters}
-          onChange={handleFilterChange}
-          onReset={handleReset}
-          resultCount={data?.totalResults}
-          loading={busy}
+          onChange={startNewSession}
+          onReset={() => startNewSession(DEFAULT_FILTERS)}
+          resultCount={results?.totalResults}
+          loading={initialLoading}
         />
 
-        {data?.message && <p className="banner">{data.message}</p>}
+        {results?.message && <p className="banner">{results.message}</p>}
         {error && <p className="banner banner--error">{error}</p>}
 
         <MovieGrid
-          movies={data?.results ?? []}
-          scoreSource={data?.scoreSource ?? "tmdb"}
-          loading={busy}
+          movies={items}
+          scoreSource={results?.scoreSource ?? "tmdb"}
+          loading={initialLoading}
+          triggerIndex={Math.max(0, items.length - SCROLL_TRIGGER_REMAINING)}
+          triggerRef={triggerRef}
         />
 
-        {data && data.totalPages > 1 && (
-          <div className="pager">
-            <button
-              type="button"
-              className="btn"
-              disabled={page <= 1 || busy}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </button>
-            <span>
-              Page {data.page} of {data.totalPages}
-            </span>
-            <button
-              type="button"
-              className="btn"
-              disabled={page >= data.totalPages || busy}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
+        {loadingMore && (
+          <p className="feed-status" role="status">
+            Loading more…
+          </p>
+        )}
+
+        {autoPaused && cursor != null && !loadingMore && (
+          <div className="feed-status">
+            <button type="button" className="btn" onClick={handleResumeAutoLoad}>
+              Load more
             </button>
           </div>
         )}
+
+        {atEnd && items.length > 0 && !initialLoading && (
+          <p className="feed-status feed-status--end">That&rsquo;s everything.</p>
+        )}
       </main>
 
-      <SiteFooter imdbViaOmdb={data?.scoreSource === "imdb"} />
+      {atEnd && <SiteFooter imdbViaOmdb={results?.scoreSource === "imdb"} />}
     </div>
   );
 }

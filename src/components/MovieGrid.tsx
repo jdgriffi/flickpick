@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import type { Movie } from "@/lib/types";
 import { MovieCard } from "./MovieCard";
 
@@ -7,6 +8,9 @@ type Props = {
   loading?: boolean;
   /** When false, poster clicks won't overwrite home browse scroll (detail → detail). */
   rememberBrowseScroll?: boolean;
+  /** Card to attach `triggerRef` to, so infinite scroll can watch it. */
+  triggerIndex?: number;
+  triggerRef?: Ref<HTMLElement>;
   emptyTitle?: string;
   emptyBody?: string;
   className?: string;
@@ -17,6 +21,8 @@ export function MovieGrid({
   scoreSource,
   loading,
   rememberBrowseScroll = true,
+  triggerIndex,
+  triggerRef,
   emptyTitle = "No matches",
   emptyBody = "Loosen a filter or try another type, decade, genre, or score threshold.",
   className,
@@ -51,6 +57,7 @@ export function MovieGrid({
           index={index}
           scoreSource={scoreSource}
           rememberBrowseScroll={rememberBrowseScroll}
+          cardRef={index === triggerIndex ? triggerRef : undefined}
         />
       ))}
     </div>

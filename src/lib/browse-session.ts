@@ -1,24 +1,44 @@
 import { DEFAULT_FILTERS, type FilterState } from "@/components/Filters";
+import { MAX_PERSISTED_TITLES } from "@/lib/constants";
 import type {
   CompanyFilter,
-  DiscoverResponse,
   MediaType,
+  Movie,
   PersonFilter,
   VibeTag,
 } from "@/lib/types";
 
-const STORAGE_KEY = "flickpick:browse-v1";
+const STORAGE_KEY = "flickpick:browse-v2";
+
+/**
+ * One fetched batch of titles plus the cursor that follows it. Keeping batches
+ * discrete (rather than one flat list) means trimming for the storage quota can
+ * drop whole batches and still leave `cursor` pointing at the right next page.
+ */
+export type BrowseBatch = {
+  items: Movie[];
+  /** TMDB page to request after this batch, or null at the end of results. */
+  cursor: number | null;
+};
+
+export type BrowseResults = {
+  batches: BrowseBatch[];
+  totalResults: number;
+  scoreSource: "imdb" | "tmdb";
+  mediaType: MediaType;
+  message?: string;
+};
 
 export type BrowseSnapshot = {
   filters: FilterState;
-  page: number;
-  data: DiscoverResponse | null;
+  results: BrowseResults | null;
   scrollY: number;
   queryKey: string;
   savedAt: number;
 };
 
-export function buildBrowseQueryKey(filters: FilterState, page: number): string {
+/** Identity of a browse session: the filters, without any paging cursor. */
+export function buildBrowseQueryKey(filters: FilterState): string {
   const params = new URLSearchParams();
   if (filters.query.trim()) params.set("query", filters.query.trim());
   params.set("mediaType", filters.mediaType);
@@ -39,8 +59,36 @@ export function buildBrowseQueryKey(filters: FilterState, page: number): string 
     params.set("company", String(filters.company.id));
     params.set("companyName", filters.company.name);
   }
-  params.set("page", String(page));
   return params.toString();
+}
+
+/** Discover URL for one batch: the session key plus a page cursor. */
+export function buildDiscoverUrl(
+  queryKey: string,
+  page: number,
+  pageCount: number,
+): string {
+  return `/api/movies?${queryKey}&page=${page}&pageCount=${pageCount}`;
+}
+
+export function flattenBatches(batches: BrowseBatch[]): Movie[] {
+  return batches.flatMap((b) => b.items);
+}
+
+export function nextCursor(batches: BrowseBatch[]): number | null {
+  return batches.length ? batches[batches.length - 1].cursor : null;
+}
+
+/** Drop trailing batches until the persisted title count fits the storage budget. */
+function trimBatches(batches: BrowseBatch[]): BrowseBatch[] {
+  const kept: BrowseBatch[] = [];
+  let total = 0;
+  for (const batch of batches) {
+    if (kept.length && total + batch.items.length > MAX_PERSISTED_TITLES) break;
+    kept.push(batch);
+    total += batch.items.length;
+  }
+  return kept;
 }
 
 function normalizeFilters(filters: FilterState): FilterState {
@@ -75,10 +123,9 @@ function baseBrowseFilters(
 function commitBrowseFilters(filters: FilterState): void {
   saveBrowseSnapshot({
     filters,
-    page: 1,
-    data: null,
+    results: null,
     scrollY: 0,
-    queryKey: buildBrowseQueryKey(filters, 1),
+    queryKey: buildBrowseQueryKey(filters),
   });
 }
 
@@ -88,10 +135,11 @@ export function loadBrowseSnapshot(): BrowseSnapshot | null {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as BrowseSnapshot;
-    if (!parsed?.filters || typeof parsed.page !== "number") return null;
+    if (!parsed?.filters) return null;
     return {
       ...parsed,
       filters: normalizeFilters(parsed.filters),
+      results: Array.isArray(parsed.results?.batches) ? parsed.results : null,
     };
   } catch {
     return null;
@@ -101,8 +149,12 @@ export function loadBrowseSnapshot(): BrowseSnapshot | null {
 export function saveBrowseSnapshot(snapshot: Omit<BrowseSnapshot, "savedAt">): void {
   if (typeof window === "undefined") return;
   try {
+    const results = snapshot.results
+      ? { ...snapshot.results, batches: trimBatches(snapshot.results.batches) }
+      : null;
     const next: BrowseSnapshot = {
       ...snapshot,
+      results,
       filters: normalizeFilters(snapshot.filters),
       savedAt: Date.now(),
     };

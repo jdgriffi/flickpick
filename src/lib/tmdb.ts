@@ -4,12 +4,12 @@ import {
   expandWatchProviderIds,
   FREE_STREAMING_PROVIDERS,
   FREE_STREAMING_VALUE,
+  INITIAL_PAGE_COUNT,
   isKnownStreamingBrand,
   knownStreamingProviderIds,
   providerShortName,
   ratingScaleFor,
-  RESULTS_PER_PAGE,
-  TMDB_PAGE_SIZE,
+  TMDB_MAX_PAGE,
 } from "./constants";
 import type { DiscoverResponse, MediaType, Movie, MovieFilters } from "./types";
 
@@ -236,31 +236,37 @@ function mergeDiscoverPages(pages: TmdbDiscover[], page: number): TmdbDiscover {
   };
 }
 
-const TMDB_PAGES_PER_UI_PAGE = RESULTS_PER_PAGE / TMDB_PAGE_SIZE;
-
-function uiPageTotalPages(tmdbTotalResults: number): number {
-  return Math.max(1, Math.ceil(tmdbTotalResults / RESULTS_PER_PAGE));
+function clampStartPage(raw: string | undefined): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, TMDB_MAX_PAGE);
 }
 
-/** Fetch consecutive TMDB pages for one UI browse page (e.g. UI page 2 → TMDB pages 3–4). */
+/** Keep the batch inside TMDB's 500-page ceiling; default to a single page. */
+function clampPageCount(raw: string | undefined, startPage: number): number {
+  const n = Math.floor(Number(raw));
+  const requested = Number.isFinite(n) && n >= 1 ? Math.min(n, INITIAL_PAGE_COUNT) : 1;
+  return Math.max(1, Math.min(requested, TMDB_MAX_PAGE - startPage + 1));
+}
+
+/** Fetch `count` consecutive TMDB pages starting at `startPage`, merged into one batch. */
 async function fetchDiscoverBatch(
   path: string,
   params: Record<string, string>,
-  uiPage: number,
+  startPage: number,
+  count: number,
 ): Promise<TmdbDiscover> {
-  const startTmdbPage = (uiPage - 1) * TMDB_PAGES_PER_UI_PAGE + 1;
   const tmdbPages = await Promise.all(
-    Array.from({ length: TMDB_PAGES_PER_UI_PAGE }, (_, i) =>
-      tmdbFetch<TmdbDiscover>(path, { ...params, page: String(startTmdbPage + i) }),
+    Array.from({ length: count }, (_, i) =>
+      tmdbFetch<TmdbDiscover>(path, { ...params, page: String(startPage + i) }),
     ),
   );
-  const merged = mergeDiscoverPages(tmdbPages, uiPage);
-  const totalResults = tmdbPages[0]?.total_results ?? merged.total_results;
+  const merged = mergeDiscoverPages(tmdbPages, startPage);
   return {
-    page: uiPage,
+    page: startPage,
     results: merged.results,
-    total_results: totalResults,
-    total_pages: uiPageTotalPages(totalResults),
+    total_results: tmdbPages[0]?.total_results ?? merged.total_results,
+    total_pages: Math.max(...tmdbPages.map((p) => p.total_pages), 1),
   };
 }
 
@@ -465,7 +471,7 @@ function filterDemo(filters: MovieFilters, mediaType: MediaType): DiscoverRespon
 
   return {
     page: 1,
-    totalPages: 1,
+    nextPage: null,
     totalResults: results.length,
     results,
     scoreSource: "imdb",
@@ -523,7 +529,8 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
     params["vote_count.gte"] = "1";
   }
 
-  const pageNum = Number(params.page) || 1;
+  const startPage = clampStartPage(filters.page);
+  const pageCount = clampPageCount(filters.pageCount, startPage);
   const gte = dateGteKey(mediaType);
   const lte = dateLteKey(mediaType);
 
@@ -533,7 +540,7 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
       query: filters.query.trim(),
       language: "en-US",
       include_adult: "false",
-    }, pageNum);
+    }, startPage, pageCount);
   } else if (needsDecadeParallel && needsCertParallel) {
     delete params.certification;
     delete params["certification.gte"];
@@ -545,11 +552,10 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
           ...params,
           [gte]: `${range.start}-01-01`,
           [lte]: `${range.end}-12-31`,
-        }, pageNum),
+        }, startPage, pageCount),
       ),
     );
-    data = mergeDiscoverPages(pages, pageNum);
-    data.total_pages = uiPageTotalPages(pages[0]?.total_results ?? data.total_results);
+    data = mergeDiscoverPages(pages, startPage);
   } else if (needsDecadeParallel) {
     const pages = await Promise.all(
       decades.map((range) =>
@@ -557,11 +563,10 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
           ...params,
           [gte]: `${range.start}-01-01`,
           [lte]: `${range.end}-12-31`,
-        }, pageNum),
+        }, startPage, pageCount),
       ),
     );
-    data = mergeDiscoverPages(pages, pageNum);
-    data.total_pages = uiPageTotalPages(pages[0]?.total_results ?? data.total_results);
+    data = mergeDiscoverPages(pages, startPage);
   } else if (needsCertParallel) {
     const pages = await Promise.all(
       certs.map((cert) =>
@@ -569,13 +574,12 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
           ...params,
           certification_country: "US",
           certification: cert,
-        }, pageNum),
+        }, startPage, pageCount),
       ),
     );
-    data = mergeDiscoverPages(pages, pageNum);
-    data.total_pages = uiPageTotalPages(pages[0]?.total_results ?? data.total_results);
+    data = mergeDiscoverPages(pages, startPage);
   } else {
-    data = await fetchDiscoverBatch(discoverPath, params, pageNum);
+    data = await fetchDiscoverBatch(discoverPath, params, startPage, pageCount);
   }
 
   let enriched = await enrichTitles(data.results, mediaType);
@@ -596,9 +600,12 @@ export async function discoverMovies(filters: MovieFilters): Promise<DiscoverRes
   const scoreSource: "imdb" | "tmdb" = omdbScores.size > 0 ? "imdb" : "tmdb";
   const results = applyClientScoreLogic(withScores, filters, scoreSource);
 
+  const lastPage = startPage + pageCount - 1;
+  const available = Math.min(data.total_pages, TMDB_MAX_PAGE);
+
   return {
-    page: data.page,
-    totalPages: Math.min(data.total_pages, Math.floor(500 / TMDB_PAGES_PER_UI_PAGE)),
+    page: startPage,
+    nextPage: lastPage < available ? lastPage + 1 : null,
     totalResults: data.total_results,
     results,
     scoreSource,

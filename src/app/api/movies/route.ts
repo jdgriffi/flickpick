@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     minScore: sp.get("minScore") || undefined,
     sort: sp.get("sort") || undefined,
     page: sp.get("page") || undefined,
+    pageCount: sp.get("pageCount") || undefined,
     query: sp.get("query") || undefined,
     keyword: sp.get("keyword") || undefined,
     person: sp.get("person") || undefined,

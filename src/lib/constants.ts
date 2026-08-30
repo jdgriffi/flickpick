@@ -265,8 +265,27 @@ export const MIN_SCORE_OPTIONS = [
 /** TMDB discover/search page size (fixed by the API). */
 export const TMDB_PAGE_SIZE = 20;
 
-/** Browse grid page size — two TMDB pages merged per UI page. */
-export const RESULTS_PER_PAGE = 40;
+/** TMDB refuses discover/search pages past 500. */
+export const TMDB_MAX_PAGE = 500;
+
+/** First browse batch pulls two TMDB pages so the grid opens with 40 titles. */
+export const INITIAL_PAGE_COUNT = 2;
+
+/** Each infinite-scroll top-up pulls one TMDB page (20 titles). */
+export const LOAD_MORE_PAGE_COUNT = 1;
+
+/** Fetch the next batch once the user is within this many titles of the end. */
+export const SCROLL_TRIGGER_REMAINING = 20;
+
+/**
+ * Consecutive batches that survive filtering with zero new titles before auto-loading
+ * gives up and falls back to a manual button. Guards against a scroll loop when a
+ * narrow filter matches almost nothing.
+ */
+export const MAX_EMPTY_BATCH_STREAK = 5;
+
+/** Cap on titles written to sessionStorage so deep scrolls can't blow the quota. */
+export const MAX_PERSISTED_TITLES = 400;
 
 export const POSTER_SIZE = "w342";
 export const BACKDROP_SIZE = "w1280";
